@@ -19,10 +19,16 @@ class ListingController extends Controller
      */
     public function index(ListingIndexRequest $request): Response
     {
-        $query = Listing::query()->live();
+        // The resource includes each listing's branch; load them in one query
+        // rather than one per card.
+        $query = Listing::query()->live()->with('branch');
 
         if ($request->filled('property_type')) {
             $query->where('property_type', $request->string('property_type'));
+        }
+
+        if ($request->filled('min_price')) {
+            $query->where('price', '>=', $request->integer('min_price'));
         }
 
         if ($request->filled('max_price')) {
@@ -31,6 +37,14 @@ class ListingController extends Controller
 
         if ($request->filled('min_bedrooms')) {
             $query->where('bedrooms', '>=', $request->integer('min_bedrooms'));
+        }
+
+        if ($request->filled('max_bedrooms')) {
+            $query->where('bedrooms', '<=', $request->integer('max_bedrooms'));
+        }
+
+        if ($request->filled('min_bathrooms')) {
+            $query->where('bathrooms', '>=', $request->integer('min_bathrooms'));
         }
 
         if ($request->filled('region')) {
@@ -52,7 +66,15 @@ class ListingController extends Controller
             'listings' => ListingResource::collection($listings),
             'branches' => BranchResource::collection(Branch::query()->orderBy('name')->get()),
             'propertyTypes' => PropertyType::options(),
-            'filters' => $request->only('property_type', 'max_price', 'min_bedrooms', 'region'),
+            'filters' => $request->only(
+                'property_type',
+                'min_price',
+                'max_price',
+                'min_bedrooms',
+                'max_bedrooms',
+                'min_bathrooms',
+                'region',
+            ),
         ]);
     }
 

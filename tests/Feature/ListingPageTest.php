@@ -6,6 +6,7 @@ use App\Enums\PropertyType;
 use App\Models\Branch;
 use App\Models\Listing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -50,6 +51,45 @@ class ListingPageTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page->has('listings.data', 1));
     }
 
+    public function test_index_filters_by_min_price(): void
+    {
+        Listing::factory()->live()->create(['price' => 299_000]);
+        Listing::factory()->live()->create(['price' => 300_000]);
+
+        $this->get('/?min_price=300000&per_page=100')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('listings.data', 1)
+                ->where('listings.data.0.price', 300_000)
+            );
+    }
+
+    public function test_index_filters_by_max_bedrooms(): void
+    {
+        Listing::factory()->live()->create(['bedrooms' => 3]);
+        Listing::factory()->live()->create(['bedrooms' => 4]);
+
+        $this->get('/?max_bedrooms=3&per_page=100')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('listings.data', 1)
+                ->where('listings.data.0.bedrooms', 3)
+            );
+    }
+
+    public function test_index_filters_by_min_bathrooms(): void
+    {
+        Listing::factory()->live()->create(['bathrooms' => 1]);
+        Listing::factory()->live()->create(['bathrooms' => 2]);
+
+        $this->get('/?min_bathrooms=2&per_page=100')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('listings.data', 1)
+                ->where('listings.data.0.bathrooms', 2)
+            );
+    }
+
     public function test_index_filters_by_region(): void
     {
         $wanted = Branch::factory()->create(['region' => 'Manchester']);
@@ -84,11 +124,22 @@ class ListingPageTest extends TestCase
 
     public function test_index_passes_current_filters_back_to_the_page(): void
     {
-        $this->get('/?max_price=300000&min_bedrooms=2')
+        $this->get('/?min_price=100000&max_price=300000&min_bedrooms=2')
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('filters.min_price', '100000')
                 ->where('filters.max_price', '300000')
                 ->where('filters.min_bedrooms', '2')
+            );
+    }
+
+    public function test_index_passes_the_bedroom_and_bathroom_filters_back_to_the_page(): void
+    {
+        $this->get('/?max_bedrooms=3&min_bathrooms=2')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('filters.max_bedrooms', '3')
+                ->where('filters.min_bathrooms', '2')
             );
     }
 
@@ -107,6 +158,45 @@ class ListingPageTest extends TestCase
             ->assertSessionHasErrors('property_type');
     }
 
+    public function test_index_rejects_a_negative_min_price(): void
+    {
+        $this->get('/?min_price=-1')
+            ->assertSessionHasErrors('min_price');
+    }
+
+    public function test_index_rejects_a_region_that_no_branch_covers(): void
+    {
+        Branch::factory()->create(['region' => 'Leeds']);
+
+        $this->get('/?region=Atlantis')
+            ->assertSessionHasErrors(['region' => 'We have no branches in that area.']);
+    }
+
+    public function test_index_rejects_a_min_price_above_the_max_price(): void
+    {
+        $this->get('/?min_price=400000&max_price=300000')
+            ->assertSessionHasErrors([
+                'min_price' => 'The minimum price cannot be more than the maximum price.',
+            ]);
+    }
+
+    public function test_index_rejects_min_bedrooms_above_max_bedrooms(): void
+    {
+        $this->get('/?min_bedrooms=4&max_bedrooms=3')
+            ->assertSessionHasErrors([
+                'min_bedrooms' => 'The minimum bedrooms cannot be more than the maximum bedrooms.',
+            ]);
+    }
+
+    public function test_index_accepts_a_min_price_equal_to_the_max_price(): void
+    {
+        Listing::factory()->live()->create(['price' => 300_000]);
+
+        $this->get('/?min_price=300000&max_price=300000')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->has('listings.data', 1));
+    }
+
     public function test_index_paginates_deterministically_when_listed_at_ties(): void
     {
         $listedAt = now()->subDay();
@@ -121,6 +211,28 @@ class ListingPageTest extends TestCase
 
         $this->assertSame([], array_intersect($first, $second), 'Pages must not overlap.');
         $this->assertCount(6, array_unique([...$first, ...$second]));
+    }
+
+    /**
+     * Every card shows its branch, so the branches have to be loaded for the
+     * whole page at once rather than with one query per listing.
+     */
+    public function test_index_runs_the_same_number_of_queries_however_many_listings_it_shows(): void
+    {
+        $countQueries = function (): int {
+            DB::flushQueryLog();
+            $this->get('/')->assertOk();
+
+            return count(DB::getQueryLog());
+        };
+        DB::enableQueryLog();
+        Listing::factory(2)->live()->create();
+        $withTwoListings = $countQueries();
+        Listing::factory(3)->live()->create();
+
+        $withFiveListings = $countQueries();
+
+        $this->assertSame($withTwoListings, $withFiveListings);
     }
 
     public function test_show_renders_a_single_listing(): void
