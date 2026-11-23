@@ -75,6 +75,48 @@ const fieldClasses =
         </div>
 
         <div class="flex flex-col gap-1">
+            <label for="max_bedrooms" class="text-xs font-medium text-slate-600">Max beds</label>
+            <input
+                id="max_bedrooms"
+                :value="modelValue.max_bedrooms"
+                type="number"
+                min="0"
+                max="20"
+                placeholder="Any"
+                :class="[fieldClasses, 'w-28']"
+                @input="update('max_bedrooms', $event.target.value)"
+            />
+        </div>
+
+        <div class="flex flex-col gap-1">
+            <label for="min_bathrooms" class="text-xs font-medium text-slate-600">Min baths</label>
+            <input
+                id="min_bathrooms"
+                :value="modelValue.min_bathrooms"
+                type="number"
+                min="0"
+                max="20"
+                placeholder="Any"
+                :class="[fieldClasses, 'w-28']"
+                @input="update('min_bathrooms', $event.target.value)"
+            />
+        </div>
+
+        <div class="flex flex-col gap-1">
+            <label for="min_price" class="text-xs font-medium text-slate-600">Min price (£)</label>
+            <input
+                id="min_price"
+                :value="modelValue.min_price"
+                type="number"
+                min="0"
+                step="10000"
+                placeholder="Any"
+                :class="[fieldClasses, 'w-36']"
+                @input="update('min_price', $event.target.value)"
+            />
+        </div>
+
+        <div class="flex flex-col gap-1">
             <label for="max_price" class="text-xs font-medium text-slate-600">Max price (£)</label>
             <input
                 id="max_price"
